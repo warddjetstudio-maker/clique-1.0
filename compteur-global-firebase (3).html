@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Le bouton mondial</title>
+<style>
+  :root {
+    --bg:#070712; --panel:rgba(14,16,40,.72); --cyan:#00f0ff; --pink:#ff2bd6;
+    --gold:#ffe14d; --green:#39ff88; --text:#e8f4ff; --dim:rgba(232,244,255,.6);
+  }
+  * { box-sizing:border-box; }
+  html,body { margin:0; }
+  body {
+    min-height:100%; color:var(--text);
+    background: radial-gradient(circle at 50% -10%, #1b1650 0%, var(--bg) 60%) fixed;
+    font-family:"Trebuchet MS", system-ui, sans-serif;
+    padding:24px 16px 48px;
+  }
+  .wrap { max-width:960px; margin:0 auto; display:grid; gap:20px; }
+  .panel {
+    background:var(--panel); border:1px solid rgba(0,240,255,.25); border-radius:16px;
+    padding:20px; box-shadow:0 0 24px rgba(0,240,255,.07);
+  }
+  h2 { margin:0 0 12px; font-size:18px; font-weight:700; color:var(--cyan); }
+
+  /* Hero */
+  .hero { text-align:center; padding:28px 20px; }
+  #total {
+    font-size:clamp(52px,14vw,128px); font-weight:800; line-height:1; color:var(--cyan);
+    text-shadow:0 0 18px var(--cyan),0 0 48px rgba(0,240,255,.4);
+    font-variant-numeric:tabular-nums; word-break:break-all;
+  }
+  .sub { color:var(--dim); margin-top:6px; }
+  .live { color:var(--green); font-weight:700; }
+  #clickBtn {
+    margin:26px auto 8px; display:block; width:min(300px,80vw); aspect-ratio:1; border-radius:50%;
+    font:inherit; font-size:28px; font-weight:800; color:var(--text); cursor:pointer;
+    background:radial-gradient(circle at 50% 35%, rgba(255,43,214,.35), rgba(255,43,214,.06) 70%);
+    border:3px solid var(--pink); touch-action:manipulation; user-select:none; -webkit-user-select:none;
+    box-shadow:0 0 22px rgba(255,43,214,.7), inset 0 0 28px rgba(255,43,214,.3);
+    transition:transform .05s, box-shadow .15s;
+  }
+  #clickBtn:hover { box-shadow:0 0 38px rgba(255,43,214,.95), inset 0 0 36px rgba(255,43,214,.45); }
+  #clickBtn:active, #clickBtn.hit { transform:scale(.94); }
+  #clickBtn:focus-visible { outline:3px solid var(--cyan); outline-offset:6px; }
+  #status { font-size:13px; color:var(--dim); min-height:1.2em; }
+  #status.err { color:#ff6b6b; }
+
+  /* Grades */
+  .grades { display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:20px; }
+  .badge { font-size:26px; font-weight:800; margin:2px 0 10px; }
+  .bar { height:10px; background:rgba(255,255,255,.1); border-radius:99px; overflow:hidden; }
+  .bar > i { display:block; height:100%; width:0; background:linear-gradient(90deg,var(--pink),var(--cyan)); transition:width .3s; }
+  .small { font-size:13px; color:var(--dim); margin-top:8px; }
+
+  /* Record / défi */
+  .rec-line { display:flex; flex-wrap:wrap; gap:8px 24px; align-items:baseline; margin-bottom:6px; }
+  .gold { color:var(--gold); font-weight:800; font-size:30px; text-shadow:0 0 14px rgba(255,225,77,.5); }
+  .challenge-box { margin-top:14px; display:grid; gap:10px; }
+  .big { font-size:clamp(34px,8vw,56px); font-weight:800; font-variant-numeric:tabular-nums; }
+  button.act {
+    font:inherit; font-weight:700; cursor:pointer; color:var(--text); background:transparent;
+    border:2px solid var(--cyan); border-radius:12px; padding:12px 22px;
+    box-shadow:0 0 12px rgba(0,240,255,.45);
+  }
+  button.act:focus-visible { outline:3px solid var(--pink); outline-offset:3px; }
+  button.act:disabled { opacity:.5; cursor:default; }
+  .win { color:var(--green); font-weight:800; }
+  .lose { color:#ff9f6b; font-weight:800; }
+
+  /* Tableau */
+  .tw { overflow-x:auto; }
+  table { width:100%; border-collapse:collapse; font-variant-numeric:tabular-nums; min-width:520px; }
+  th,td { padding:9px 10px; text-align:right; border-bottom:1px solid rgba(255,255,255,.08); }
+  th:first-child, td:first-child { text-align:left; }
+  th { color:var(--cyan); font-weight:700; }
+  @media (prefers-reduced-motion: reduce) { #clickBtn { transition:none; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <section class="panel hero">
+    <div class="sub">Clics de tout le monde</div>
+    <div id="total" aria-live="off">…</div>
+    <div class="sub">En ce moment : <span id="liveRate" class="live">0</span> clics/s dans le monde</div>
+    <button id="clickBtn" type="button">CLIQUE</button>
+    <div id="status">Connexion à Firebase…</div>
+  </section>
+
+  <section class="grades">
+    <div class="panel">
+      <h2>Ton grade</h2>
+      <div class="badge" id="myBadge">—</div>
+      <div class="bar"><i id="myBar"></i></div>
+      <div class="small" id="myInfo"></div>
+    </div>
+    <div class="panel">
+      <h2>Grade du monde</h2>
+      <div class="badge" id="gBadge">—</div>
+      <div class="bar"><i id="gBar"></i></div>
+      <div class="small" id="gInfo"></div>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>Record de la communauté à battre</h2>
+    <div class="rec-line">
+      <span class="gold" id="comNum">…</span>
+      <span>clics collectifs sur un seul bouton</span>
+    </div>
+    <div class="small" id="comWho"></div>
+    <div class="bar" style="margin-top:12px"><i id="comBar"></i></div>
+    <div id="comInfo" style="margin-top:8px"></div>
+  </section>
+
+  <section class="panel">
+    <h2>Battre le record du monde</h2>
+    <div class="rec-line">
+      <span class="gold" id="recNum">760</span>
+      <span>clics en 60 secondes, soit <b id="recCps">12,7</b> clics/s</span>
+    </div>
+    <div class="small" id="recWho"></div>
+
+    <div class="challenge-box">
+      <div class="big" id="chTime">60,0 s</div>
+      <div class="bar"><i id="chBar"></i></div>
+      <div id="chInfo">Lance le défi, puis clique le plus vite possible pendant 60 secondes.</div>
+      <div><button class="act" id="chBtn" type="button">Lancer le défi</button></div>
+      <div class="small" id="chBest"></div>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>Moyennes de clics (tout le monde)</h2>
+    <div class="tw">
+      <table>
+        <thead><tr><th>Période</th><th>Clics</th><th>Par seconde</th><th>Par minute</th><th>Par heure</th></tr></thead>
+        <tbody id="avgBody"></tbody>
+      </table>
+    </div>
+    <div class="small">Les périodes (heure, jour, semaine, mois) suivent l'heure UTC.</div>
+  </section>
+
+</div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import {
+  getFirestore, doc, getDocFromServer, setDoc, onSnapshot, writeBatch, increment, serverTimestamp
+} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyATLfb-MpJrXWDHvs9_2jhUbvr1gey1MFM",
+  authDomain: "clique-dd856.firebaseapp.com",
+  projectId: "clique-dd856",
+  storageBucket: "clique-dd856.firebasestorage.app",
+  messagingSenderId: "413907796118",
+  appId: "1:413907796118:web:0b2695742b25c9d40282b7"
+};
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+
+/* ---------- Réglages ---------- */
+// Record officiel Guinness : 760 clics en 60 s (Yiğit "Yigox" Arslan, Istanbul, 10 février 2026).
+// Un score de 811 a été annoncé le 13 juin 2026 (Sean K., New York) : change ici si Guinness le certifie.
+const RECORD = 760;
+const RECORD_WHO = "Détenteur : Yiğit « Yigox » Arslan, certifié Guinness, Istanbul, 10 février 2026. Un score de 811 a été annoncé en juin 2026 mais je n'ai pas trouvé de certification.";
+// Record collectif à battre. Aucun record certifié trouvé : je pars sur « The Button » de Reddit (2015, plus d'un million de clics).
+// Modifie ces deux lignes si tu veux viser un autre objectif.
+const COMMUNITY_RECORD = 1000000;
+const COMMUNITY_RECORD_WHO = "Référence : « The Button » de Reddit (2015), plus d'un million de clics par la communauté. Non certifié Guinness : objectif modifiable dans le code.";
+const CHALLENGE_SECONDS = 60;
+const MAX_PER_BATCH = 50; // doit rester ≤ à la limite des règles Firestore
+const GRADES = [
+  { min:0,        name:"Débutant",            color:"#9fb3c8" },
+  { min:1000,     name:"Clicker",             color:"#00f0ff" },
+  { min:100000,   name:"Super cliqueur",      color:"#ff2bd6" },
+  { min:1000000,  name:"Incroyable cliqueur", color:"#ffe14d" }
+];
+
+/* ---------- Utilitaires ---------- */
+const $ = id => document.getElementById(id);
+const nf = new Intl.NumberFormat("fr-FR");
+const p2 = n => String(n).padStart(2, "0");
+const fmt = n => n >= 100 ? nf.format(Math.round(n)) : n.toLocaleString("fr-FR", { maximumFractionDigits: 2, minimumFractionDigits: n < 10 ? 2 : 1 });
+const lsGet = (k, d) => { try { const v = localStorage.getItem(k); return v === null ? d : JSON.parse(v); } catch { return d; } };
+const lsSet = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} };
+
+$("recNum").textContent = RECORD;
+$("recCps").textContent = (RECORD / CHALLENGE_SECONDS).toLocaleString("fr-FR", { maximumFractionDigits: 1 });
+$("recWho").textContent = RECORD_WHO;
+$("comNum").textContent = nf.format(COMMUNITY_RECORD);
+$("comWho").textContent = COMMUNITY_RECORD_WHO;
+
+function setStatus(msg, err = false) {
+  const s = $("status"); s.textContent = msg; s.classList.toggle("err", err);
+}
+
+/* ---------- Périodes (UTC) ---------- */
+function periods(now = new Date()) {
+  const y = now.getUTCFullYear(), m = now.getUTCMonth(), d = now.getUTCDate(), h = now.getUTCHours();
+  const hourStart = Date.UTC(y, m, d, h);
+  const dayStart = Date.UTC(y, m, d);
+  const weekStart = dayStart - ((now.getUTCDay() + 6) % 7) * 864e5; // lundi
+  const monthStart = Date.UTC(y, m, 1);
+  const ymd = ms => { const t = new Date(ms); return `${t.getUTCFullYear()}${p2(t.getUTCMonth() + 1)}${p2(t.getUTCDate())}`; };
+  return {
+    hour:  { id: `h_${ymd(hourStart)}${p2(h)}`, start: hourStart },
+    day:   { id: `d_${ymd(dayStart)}`,          start: dayStart },
+    week:  { id: `w_${ymd(weekStart)}`,         start: weekStart },
+    month: { id: `m_${y}${p2(m + 1)}`,          start: monthStart }
+  };
+}
+
+/* ---------- État ---------- */
+const counts = { total: 0, hour: 0, day: 0, week: 0, month: 0 };
+const loaded = { total: false, hour: false, day: false, week: false, month: false }; // vrai uniquement après une valeur confirmée par le serveur
+let inflight = 0;      // lots en cours d'envoi
+let floorVal = 0;      // le compteur affiché ne redescend jamais tant que des écritures sont en vol
+let startedAtMs = Date.now();
+let P = periods();
+const unsubs = {};
+const subIds = {};
+let pending = 0;
+let mine = lsGet("myClicks", 0);
+const samples = []; // [temps, total] pour le débit mondial
+const myHits = [];
+
+/* ---------- Abonnements Firestore ---------- */
+function onErr(e) {
+  console.error(e);
+  setStatus(e.code === "permission-denied"
+    ? "Firestore refuse l'accès : colle les règles de sécurité dans la console Firebase."
+    : "Erreur Firebase : " + (e.message || e.code), true);
+}
+
+function subscribeTotal() {
+  onSnapshot(doc(db, "stats", "global"), { includeMetadataChanges: true }, snap => {
+    // On ignore tout ce qui vient du cache local : c'est la source des "0" parasites.
+    if (snap.metadata.fromCache) return;
+    const d = snap.exists() ? snap.data() : {};
+    const c = Number(d.count) || 0;
+    if (!loaded.total || c !== counts.total) {
+      counts.total = c;
+      samples.push([Date.now(), c]);
+      while (samples.length > 1 && Date.now() - samples[0][0] > 12000) samples.shift();
+    }
+    if (d.startedAt && d.startedAt.toMillis) startedAtMs = d.startedAt.toMillis();
+    loaded.total = true;
+    // Valeur 100 % confirmée, rien en attente : on resynchronise exactement sur le serveur.
+    if (!snap.metadata.hasPendingWrites && inflight === 0 && pending === 0) floorVal = 0;
+    setStatus("Connecté en direct");
+  }, onErr);
+}
+
+function syncPeriodSubs() {
+  P = periods();
+  for (const name of ["hour", "day", "week", "month"]) {
+    if (subIds[name] === P[name].id) continue;
+    if (unsubs[name]) unsubs[name]();
+    counts[name] = 0;
+    loaded[name] = false;
+    subIds[name] = P[name].id;
+    unsubs[name] = onSnapshot(doc(db, "stats", P[name].id), snap => {
+      if (snap.metadata.fromCache) return;
+      counts[name] = snap.exists() ? (Number(snap.data().count) || 0) : 0;
+      loaded[name] = true;
+    }, onErr);
+  }
+}
+
+async function init() {
+  try {
+    const gRef = doc(db, "stats", "global");
+    const s = await getDocFromServer(gRef); // lit le serveur, pas le cache : évite de recréer le doc à 0 par erreur
+    if (!s.exists()) await setDoc(gRef, { count: 0, startedAt: serverTimestamp() }, { merge: true });
+  } catch (e) { onErr(e); }
+  subscribeTotal();
+  syncPeriodSubs();
+}
+
+/* ---------- Envoi des clics par lots ---------- */
+async function flush() {
+  if (pending <= 0) return;
+  const n = Math.min(pending, MAX_PER_BATCH);
+  // On fige l'affichage AVANT de retirer les clics de "pending" : pas de creux le temps que Firestore les intègre.
+  floorVal = Math.max(floorVal, counts.total + pending);
+  pending -= n;
+  inflight++;
+  try {
+    const b = writeBatch(db);
+    b.set(doc(db, "stats", "global"), { count: increment(n) }, { merge: true });
+    for (const name of ["hour", "day", "week", "month"]) {
+      b.set(doc(db, "stats", P[name].id), { count: increment(n) }, { merge: true });
+    }
+    await b.commit();
+  } catch (e) {
+    pending += n; // on réessaiera
+    onErr(e);
+  } finally {
+    inflight--;
+  }
+}
+setInterval(flush, 1000);
+document.addEventListener("visibilitychange", () => { if (document.hidden) flush(); });
+window.addEventListener("pagehide", flush);
+
+/* ---------- Bouton ---------- */
+const btn = $("clickBtn");
+btn.addEventListener("keydown", e => { if (e.repeat) e.preventDefault(); });
+btn.addEventListener("click", e => {
+  if (!e.isTrusted) return;
+  pending++; mine++;
+  lsSet("myClicks", mine);
+  myHits.push(performance.now());
+  if (ch.phase === "run") ch.clicks++;
+  btn.classList.add("hit");
+  setTimeout(() => btn.classList.remove("hit"), 50);
+});
+
+/* ---------- Grades ---------- */
+function gradeFor(n) {
+  let i = 0;
+  GRADES.forEach((g, idx) => { if (n >= g.min) i = idx; });
+  return i;
+}
+function renderGrade(prefix, n) {
+  const i = gradeFor(n), g = GRADES[i], next = GRADES[i + 1];
+  const badge = $(prefix + "Badge");
+  badge.textContent = g.name; badge.style.color = g.color; badge.style.textShadow = `0 0 14px ${g.color}`;
+  if (next) {
+    const pct = Math.max(0, Math.min(100, ((n - g.min) / (next.min - g.min)) * 100));
+    $(prefix + "Bar").style.width = pct + "%";
+    $(prefix + "Info").textContent = `${nf.format(n)} clics, encore ${nf.format(next.min - n)} pour devenir « ${next.name} ».`;
+  } else {
+    $(prefix + "Bar").style.width = "100%";
+    $(prefix + "Info").textContent = `${nf.format(n)} clics : grade maximum atteint.`;
+  }
+}
+
+/* ---------- Défi 60 s ---------- */
+const ch = { phase: "idle", t0: 0, clicks: 0 };
+const chBtn = $("chBtn");
+chBtn.addEventListener("click", () => {
+  if (ch.phase === "count" || ch.phase === "run") return;
+  ch.phase = "count"; ch.t0 = performance.now() + 3000; ch.clicks = 0;
+  chBtn.disabled = true;
+});
+
+function renderChallenge() {
+  const now = performance.now();
+  const best = lsGet("bestChallenge", 0);
+  $("chBest").textContent = best ? `Ton meilleur score : ${nf.format(best)} clics en 60 s` : "";
+
+  if (ch.phase === "count") {
+    const left = ch.t0 - now;
+    if (left <= 0) { ch.phase = "run"; ch.t0 = now; }
+    else {
+      $("chTime").textContent = Math.ceil(left / 1000);
+      $("chInfo").textContent = "Prépare ta souris…";
+      $("chBar").style.width = "0%";
+      return;
+    }
+  }
+  if (ch.phase === "run") {
+    const elapsed = (now - ch.t0) / 1000;
+    const left = CHALLENGE_SECONDS - elapsed;
+    if (left <= 0) {
+      ch.phase = "done"; chBtn.disabled = false; chBtn.textContent = "Rejouer";
+      if (ch.clicks > best) lsSet("bestChallenge", ch.clicks);
+    } else {
+      const need = RECORD - ch.clicks;
+      $("chTime").textContent = left.toLocaleString("fr-FR", { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + " s";
+      $("chBar").style.width = Math.min(100, (ch.clicks / RECORD) * 100) + "%";
+      $("chInfo").innerHTML = need > 0
+        ? `<b>${nf.format(ch.clicks)}</b> clics. Il t'en reste <b>${nf.format(need)}</b> à faire, soit <b>${(need / left).toLocaleString("fr-FR", { maximumFractionDigits: 1 })}</b> clics/s pour battre le record.`
+        : `<span class="win">Record dépassé en cours de route : ${nf.format(ch.clicks)} clics !</span>`;
+      return;
+    }
+  }
+  if (ch.phase === "done") {
+    $("chTime").textContent = "0,0 s";
+    $("chBar").style.width = Math.min(100, (ch.clicks / RECORD) * 100) + "%";
+    const cps = (ch.clicks / CHALLENGE_SECONDS).toLocaleString("fr-FR", { maximumFractionDigits: 1 });
+    $("chInfo").innerHTML = ch.clicks > RECORD
+      ? `<span class="win">${nf.format(ch.clicks)} clics (${cps}/s) : tu bats le record du monde de ${RECORD} !</span>`
+      : `<span class="lose">${nf.format(ch.clicks)} clics (${cps}/s). Il t'en manquait ${nf.format(RECORD + 1 - ch.clicks)} pour battre le record.</span>`;
+  }
+}
+
+/* ---------- Moyennes ---------- */
+const rows = [
+  { label: "Cette heure",   key: "hour",  start: () => P.hour.start },
+  { label: "Aujourd'hui",   key: "day",   start: () => P.day.start },
+  { label: "Cette semaine", key: "week",  start: () => P.week.start },
+  { label: "Ce mois",       key: "month", start: () => P.month.start },
+  { label: "Depuis le début", key: "total", start: () => startedAtMs }
+];
+function renderAverages() {
+  const now = Date.now();
+  $("avgBody").innerHTML = rows.map(r => {
+    if (!loaded[r.key]) return `<tr><td>${r.label}</td><td>…</td><td>…</td><td>…</td><td>…</td></tr>`;
+    const total = counts[r.key];
+    const secs = Math.max(1, (now - r.start()) / 1000);
+    const ps = total / secs;
+    return `<tr><td>${r.label}</td><td>${nf.format(total)}</td><td>${fmt(ps)}</td><td>${fmt(ps * 60)}</td><td>${fmt(ps * 3600)}</td></tr>`;
+  }).join("");
+}
+
+/* ---------- Boucle d'affichage ---------- */
+function liveRate() {
+  if (samples.length < 2) return 0;
+  const [t0, c0] = samples[0], [t1, c1] = samples[samples.length - 1];
+  return t1 - t0 > 500 ? Math.max(0, (c1 - c0) / ((t1 - t0) / 1000)) : 0;
+}
+let lastShown = -1;
+function tick() {
+  syncPeriodSubs();
+  if (loaded.total) {
+    let shown = counts.total + pending;
+    if (inflight > 0 || pending > 0) { shown = Math.max(shown, floorVal); floorVal = shown; } // jamais de recul pendant l'envoi
+    if (shown !== lastShown) { $("total").textContent = nf.format(shown); lastShown = shown; }
+    $("liveRate").textContent = fmt(liveRate() || 0).replace(",00", "");
+    renderGrade("g", shown);
+    const left = COMMUNITY_RECORD - shown;
+    $("comBar").style.width = Math.min(100, (shown / COMMUNITY_RECORD) * 100) + "%";
+    $("comInfo").innerHTML = left > 0
+      ? `<b>${nf.format(shown)}</b> clics. Il en reste <b>${nf.format(left)}</b> à faire ensemble pour battre le record (${(shown / COMMUNITY_RECORD * 100).toLocaleString("fr-FR", { maximumFractionDigits: 2 })} %).`
+      : `<span class="win">Record battu par la communauté : ${nf.format(shown)} clics, soit ${nf.format(-left)} de plus que le record !</span>`;
+  } else {
+    $("total").textContent = "…";
+    $("liveRate").textContent = "…";
+    $("gBadge").textContent = "…"; $("gInfo").textContent = "";
+  }
+  renderGrade("my", mine);
+  renderChallenge();
+  renderAverages();
+}
+setInterval(tick, 200);
+tick();
+init();
+</script>
+</body>
+</html>
